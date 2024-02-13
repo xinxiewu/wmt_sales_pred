@@ -2,11 +2,14 @@
 util.py contains custom functions:
     1. delete_files: Delete files in given folder, with exception
     2. download_file: Download, unzip and read files
+    3. vars_dist: Statistics & distribution of single variables
 '''
 import os
 import requests
 import shutil
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 # delete_files(path, exception)
 def delete_files(path=None, exception=None):
@@ -24,14 +27,15 @@ def delete_files(path=None, exception=None):
             os.remove(os.path.join(path, fname))
     return
 
-# download_file(url, unzip, output)
-def download_file(url=None, unzip=None, output=None):
+# download_file(url, unzip, output, dt_col)
+def download_file(url=None, unzip=None, output=None, dt_col=None):
     ''' Download, unzip and read files into DataFrame
 
     Args:
         url: str, data files' download link
         unzip: Y if need to unzip files, otherwise N
         output: path to store files, starting with r''
+        dt_col: list, feature needed to date format
 
     Returns:
         DataFrame
@@ -50,9 +54,19 @@ def download_file(url=None, unzip=None, output=None):
                 res = fname
                 i += 1
         if i == 1:
-            return pd.read_csv(os.path.join(os.path.dirname(local_filename), res))
+            if dt_col == None:
+                return pd.read_csv(os.path.join(os.path.dirname(local_filename), res))
+            else:
+                return pd.read_csv(os.path.join(os.path.dirname(local_filename), res), parse_dates=dt_col)
         else:
             print(f"There are {i} csv files!")
             return
     else:
-        return pd.read_csv(local_filename)
+        if dt_col == None:
+            return pd.read_csv(local_filename)
+        else:
+            return pd.read_csv(local_filename, parse_dates=dt_col)
+        
+# vars_dist(df)
+def vars_dist(df=None):
+    pass
