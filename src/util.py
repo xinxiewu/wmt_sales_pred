@@ -7,6 +7,8 @@ util.py contains custom functions:
 import os
 import requests
 import shutil
+import numpy as np
+from scipy.stats import chisquare, kstest
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -67,6 +69,94 @@ def download_file(url=None, unzip=None, output=None, dt_col=None):
         else:
             return pd.read_csv(local_filename, parse_dates=dt_col)
         
-# vars_dist(df)
-def vars_dist(df=None):
-    pass
+# vars_dist(df, catex, ft_catex, cont, ft_cont, output, fname, fpath, subplots, figsize)
+def vars_dist(df=None, catex=False, ft_catex=None, cont=False, ft_cont=None, output=False, fname=None, fpath=None, subplots=None, figsize=None):
+    ''' Generate single variable's statistics & distribution, and save
+
+    Args:
+        df: DataFrame, input data for analysis
+        catex: True if analyze categorical features, otherwise False
+        ft_catex: List, categorical features
+        cont: True if analyze continuous features, otherwise False
+        ft_cont: List, continuous features
+        output: True if generate file and save, otherwise False
+        fname: str, file name if need to output
+        fpath: path to store files, starting with r''
+        subplots: List, # of plots
+        figsize: tuple, figure size
+
+    Returns:
+        DataFrame
+    '''
+    sns.set()
+    fig, axes = plt.subplots(subplots[0], subplots[1], figsize=figsize)
+    ax, i, cols = axes.flatten(), 0, list(ft_catex) if catex == True else list(ft_cont)
+    if catex == True:
+        res = pd.DataFrame(columns=['Variable', 'Type', 'Records', 'Unique', 'Mean', 'Std', 'Median', 'Pctile_25', 'Pctile_75', 'Chi-square', 'P-value', 'Conclusion'])
+        for col in cols:
+            temp = sns.countplot(data=df, x=col, ax=ax[i])
+            temp.set(xlabel=col, ylabel=f"Count of {col}", title=f"Count Plot of {col}")
+            if df.loc[:, col].nunique() > 10:
+                temp.set(xticklabels=[])
+            else:
+                tol = len(getattr(df, col))
+                for p in ax[i].patches:
+                    txt = str((100*p.get_height()/tol).round(2)) + '%'
+                    x, y = p.get_x(), p.get_height()
+                    ax[i].annotate(txt, (x, y), fontsize=15)
+            col_cnt = getattr(df, col).value_counts()
+            chi_sq = chisquare(np.array(col_cnt), np.repeat(len(getattr(df, col))/len(col_cnt), len(col_cnt)))
+            if chi_sq[1] < 0.05:
+                conclus = 'Imbalanced'
+            else:
+                conclus = 'Uniformly distributed'
+            df_temp = pd.DataFrame({'Variable': [col], 'Type': ['Categorical'], 'Records': [len(getattr(df, col))], 
+                                    'Unique': [getattr(df, col).nunique()], 'Mean': [round(col_cnt.mean(), 2)], 'Std': [round(col_cnt.std(), 2)], 
+                                    'Median': [round(col_cnt.median(), 2)], 'Pctile_25': [round(col_cnt.quantile(q=0.25), 2)], 'Pctile_75': [round(col_cnt.quantile(q=0.75), 2)], 
+                                    'Chi-square': [round(chi_sq[0], 2)], 'P-value': [round(chi_sq[1], 2)],
+                                    'Conclusion': [conclus]})
+            res = pd.concat([res, df_temp])
+            i += 1
+            col_cnt.mean(), col_cnt.std(), col_cnt.median(), col_cnt.quantile(q=0.25), col_cnt.quantile(q=0.75)
+        plt.suptitle('Distribution of Categorical Variables')
+    else:
+        res = pd.DataFrame(columns=['Variable', 'Type', 'Records', 'Mean', 'Std', 
+                                    'Median', 'Pctile_25', 'Pctile_75', 'IQR', 'R_Lo', 'R_Hi', 
+                                    'Skewness', 'Kurtosis', 'KS_stat', 'KS_P_val'])
+        for col in cols:
+            temp = sns.histplot(getattr(df, col), kde=True, color='purple', ax=ax[i])
+            temp.set(xlabel=col, ylabel='Density', title=f"Histogram of {col}")
+            i += 1
+            temp = sns.boxplot(getattr(df, col), width=0.3, palette=['m'], ax=ax[i])
+            temp.set(xlabel=col, xticklabels=[], ylabel='Value', title=f"Boxplot of {col}")
+            ks_res = kstest(getattr(df, col), 'norm', (getattr(df, col).mean(), getattr(df, col).std()))
+            conclus = 'Unknown'
+            if ks_res[1] >= 0.05:
+                conclus = 'Normally distributed'
+            elif getattr(df, col).skew() < 0 and getattr(df, col).kurt() < 0:
+                conclus = 'Left-skewed & low-peak'
+            elif getattr(df, col).skew() < 0 and getattr(df, col).kurt() > 0:
+                conclus = 'Left-skewed & high-peak'
+            elif getattr(df, col).skew() > 0 and getattr(df, col).kurt() < 0:
+                conclus = 'Right-skewed & low-peak'
+            elif getattr(df, col).skew() > 0 and getattr(df, col).kurt() > 0:
+                conclus = 'Right-skewed & high-peak'
+            df_temp = pd.DataFrame({'Variable': [col], 'Type': ['Continuous'], 'Records': [len(getattr(df, col))], 
+                                    'Mean': [round(getattr(df, col).mean(), 2)], 'Std': [round(getattr(df, col).std(), 2)], 'Median': [round(getattr(df, col).median(), 2)], 
+                                    'Pctile_25': [round(getattr(df, col).quantile(q=0.25), 2)], 'Pctile_75': [round(getattr(df, col).quantile(q=0.75), 2)], 
+                                    'IQR': [round(getattr(df, col).quantile(q=0.75)-getattr(df, col).quantile(q=0.25), 2)], 
+                                    'R_Lo': [round(getattr(df, col).quantile(q=0.25)-1.5*(getattr(df, col).quantile(q=0.75)-getattr(df, col).quantile(q=0.25)), 2)], 
+                                    'R_Hi': [round(getattr(df, col).quantile(q=0.75)+1.5*(getattr(df, col).quantile(q=0.75)-getattr(df, col).quantile(q=0.25)), 2)],
+                                    'Skewness': [round(getattr(df, col).skew(), 2)], 'Kurtosis': [round(getattr(df, col).kurt(), 2)],
+                                    'KS_stat': [round(ks_res[0], 2)], 'KS_P_val': [ks_res[1]],
+                                    'Conclusion': [conclus]})
+            res = pd.concat([res, df_temp])
+            i += 1
+        plt.suptitle('Distribution of Continuous Variables')
+        
+    plt.tight_layout()
+    
+    if output == True:
+        plt.savefig(os.path.join(fpath, fname))
+
+    return res.reset_index().drop(columns=['index'])
