@@ -8,7 +8,7 @@ import os
 import requests
 import shutil
 import numpy as np
-from scipy.stats import chisquare, kstest
+from scipy.stats import chisquare, kstest, f_oneway, chi2_contingency
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -156,6 +156,92 @@ def vars_dist(df=None, catex=False, ft_catex=None, cont=False, ft_cont=None, out
         
     plt.tight_layout()
     
+    if output == True:
+        plt.savefig(os.path.join(fpath, fname))
+
+    return res.reset_index().drop(columns=['index'])
+
+# vars_relatsh(df, cols_1, cols_2, method, output, fpath, fname, subplots, figsize)
+def vars_relatsh(df=None, cols_1=None, cols_2=None, method=None, output=False, fpath=None, fname=None, subplots=None, figsize=None):
+    ''' Generate statistics & relationships b/w variables, and save
+    
+    Args:
+        df: DataFrame, input data for analysis
+        cols_1: List, variables to use
+        cols_2: List, variable to use
+        method: str, method for analysis. 'cont-catex', 'cont-cont', 'catex-catex'
+        output: True if generate file and save, otherwise False
+        fname: str, file name if need to output
+        fpath: path to store files, starting with r''
+        subplots: List, # of plots
+        figsize: tuple, figure size
+
+    Returns:
+        DataFrame
+    '''
+    if method.lower() == 'cont-cont':
+        sns.set_theme(style="white")
+        res = df[cols_1].corr()
+        ax = sns.heatmap(data=res, annot=True, fmt='.2f',
+                 vmin=-1.0, vmax=1.0, center=0.0,
+                 mask=np.triu(np.ones_like(res, dtype=bool)),
+                 cmap=sns.diverging_palette(230, 20, n=200, as_cmap=True),
+                 square=True, linewidths=0.5, cbar_kws={"shrink":.5}
+                )
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=45, horizontalalignment='right', fontsize=8)
+        ax.set_yticklabels(ax.get_yticklabels(), rotation=45, horizontalalignment='right', fontsize=8)
+        plt.suptitle('Correlation w/ Continuous Variables')
+    else:
+        sns.set()
+        fig, axes = plt.subplots(subplots[0], subplots[1], figsize=figsize)
+        if subplots[0] + subplots[1] > 2:
+            ax = axes.flatten()
+        i = 0
+
+        if method.lower() == 'cont-catex':
+            res = pd.DataFrame(columns=['var_pair', 'f_val_anova', 'p_val_anova'])
+
+            for col_2 in cols_2:
+                arr_temp = getattr(df, col_2).unique()
+                for col_1 in cols_1:
+                    f_val, p_val = f_oneway(df.query(f'{col_2} == {arr_temp[0]}')[[col_1]], df.query(f'{col_2} == {arr_temp[1]}')[[col_1]])
+                    df_temp = pd.DataFrame({'var_pair': [col_2 + '-' + col_1], 'f_val_anova': [round(f_val[0], 2)], 'p_val_anova': [round(p_val[0], 2)]})
+                    res = pd.concat([res, df_temp])
+
+            for col_catex in cols_2:
+                for col in cols_1:
+                    temp = sns.boxplot(data=df, x=col_catex, y=col, width=0.3, palette=['m'], ax=ax[i])
+                    i += 1
+                    
+            plt.suptitle(f'Boxplot of {cols_2} w/ Continuous Variables')
+        elif method.lower() =='catex-catex':
+            res = pd.DataFrame(columns=['var_pair', 'chi-square', 'p_val', 'df'])
+
+            for m in range(len(cols_1)):
+                col_1 = cols_1[m]
+                for j in range(m+1, len(cols_1)):
+                    col_2 = cols_1[j]
+                    col_1_distinct, col_1_distinct_len = getattr(df, col_1).unique(), len(getattr(df, col_1).unique())
+                    col_1_dict = dict(zip(col_1_distinct, range(col_1_distinct_len)))
+                    col_2_distinct, col_2_distinct_len = getattr(df, col_2).unique(), len(getattr(df, col_2).unique())
+                    col_2_dict = dict(zip(col_2_distinct, range(col_2_distinct_len)))
+                    M = np.zeros((col_1_distinct_len, col_2_distinct_len))
+                    for z in range(df.shape[0]):
+                        M[col_1_dict[df.iloc[z,:][col_1]]][col_2_dict[df.iloc[z,:][col_2]]] += 1
+                    chi2, p, defre, expected = chi2_contingency(M, correction=False)
+                    df_temp = pd.DataFrame({'var_pair': [cols_1[m] + '-' + cols_1[j]], 'chi-square': [round(chi2, 2)], 'p_val': [round(p, 2)], 'df': [defre]})
+                    res = pd.concat([res, df_temp])
+
+            for m in range(len(cols_1)):
+                col_1 = cols_1[m]
+                for j in range(m+1, len(cols_1)):
+                    col_2 = cols_1[j]
+                    temp = sns.scatterplot(data=df, x=col_1, y=col_2, hue=col_2)
+                    i += 1
+            plt.suptitle(f'Scatterplot of {cols_1}')
+
+    plt.tight_layout()
+
     if output == True:
         plt.savefig(os.path.join(fpath, fname))
 

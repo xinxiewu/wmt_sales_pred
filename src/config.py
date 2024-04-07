@@ -23,4 +23,4 @@ TARGET = 'Weekly_Sales'
 FEATURE_ALL = {'Store', 'Date', 'Holiday_Flag', 'Temperature', 'Fuel_Price', 'CPI', 'Unemployment'}
 FEATURE_CAT = {'Store', 'Date', 'Holiday_Flag'}
 FEATURE_CONT = FEATURE_ALL - FEATURE_CAT
-
+CONT_VARS = FEATURE_CONT.union({TARGET})
